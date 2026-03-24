@@ -1,0 +1,11 @@
+# Kiota-generated client — regenerate with: kiota update -o packages/sdk/src/bella_baxter/generated/
+# or run apps/sdk/generate.sh from repo root
+packages/sdk/src/bella_baxter/generated/
+
+# Build artifacts
+packages/*/dist/
+packages/*/*.egg-info/
+packages/*/build/
+*.egg-info/
+dist/
+build/

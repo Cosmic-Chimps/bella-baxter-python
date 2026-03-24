@@ -1,0 +1,178 @@
+name: Publish Python SDK to PyPI
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Publishing version: $VERSION"
+
+      - name: Verify pyproject.toml versions match tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          for PKG in packages/sdk packages/django packages/fastapi packages/flask; do
+            PKG_VERSION=$(python3 -c "
+          import tomllib
+          with open('$PKG/pyproject.toml', 'rb') as f:
+              d = tomllib.load(f)
+          print(d['project']['version'])
+          ")
+            if [ "$PKG_VERSION" != "$VERSION" ]; then
+              echo "::error::$PKG/pyproject.toml version '$PKG_VERSION' != tag version '$VERSION'"
+              exit 1
+            fi
+          done
+          echo "✓ All pyproject.toml versions match $VERSION"
+
+  publish-sdk:
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: pypi-bella-baxter
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Set production API URL
+        env:
+          BELLA_BAXTER_API_URL: ${{ vars.BELLA_BAXTER_API_URL || 'https://api.bella-baxter.io' }}
+        run: |
+          if [ "$BELLA_BAXTER_API_URL" != "https://api.bella-baxter.io" ]; then
+            grep -rl 'https://api.bella-baxter.io' packages/ --include='*.py' \
+              | xargs sed -i "s|https://api.bella-baxter.io|${BELLA_BAXTER_API_URL}|g"
+          fi
+
+      - name: Generate Kiota Python client
+        run: |
+          dotnet tool install --global Microsoft.OpenApi.Kiota --version 1.30.0
+          kiota generate \
+            --language Python \
+            --class-name BellaClient \
+            --namespace-name bella_baxter.generated \
+            --openapi openapi.json \
+            --output packages/sdk/src/bella_baxter/generated \
+            --exclude-backward-compatible \
+            --clean-output \
+            --log-level Warning
+
+      - name: Install build tools
+        run: pip install build
+
+      - name: Build and publish bella-baxter
+        working-directory: packages/sdk
+        run: python -m build
+
+      - name: Publish bella-baxter to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: packages/sdk/dist/
+
+      - name: Wait for bella-baxter on PyPI
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+          echo "Waiting for bella-baxter==$VERSION on PyPI..."
+          for i in $(seq 1 30); do
+            STATUS=$(curl -sf "https://pypi.org/pypi/bella-baxter/$VERSION/json" \
+              | python3 -c "import json,sys; d=json.load(sys.stdin); print('yes' if 'info' in d else 'no')" \
+              2>/dev/null || echo "no")
+            if [ "$STATUS" = "yes" ]; then
+              echo "✓ bella-baxter==$VERSION is on PyPI"
+              break
+            fi
+            echo "  attempt $i/30 — not yet, waiting 15s..."
+            sleep 15
+          done
+
+  publish-django:
+    needs: [validate, publish-sdk]
+    runs-on: ubuntu-latest
+    environment: pypi-bella-baxter-django
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install build
+      - name: Build and publish bella-baxter-django
+        run: |
+          cd packages/django && python -m build
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: packages/django/dist/
+
+  publish-fastapi:
+    needs: [validate, publish-sdk]
+    runs-on: ubuntu-latest
+    environment: pypi-bella-baxter-fastapi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install build
+      - name: Build and publish bella-baxter-fastapi
+        run: |
+          cd packages/fastapi && python -m build
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: packages/fastapi/dist/
+
+  publish-flask:
+    needs: [validate, publish-sdk]
+    runs-on: ubuntu-latest
+    environment: pypi-bella-baxter-flask
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install build
+      - name: Build and publish bella-baxter-flask
+        run: |
+          cd packages/flask && python -m build
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: packages/flask/dist/
+
+  notify_slack:
+    runs-on: ubuntu-latest
+    needs: [publish-sdk, publish-django, publish-fastapi, publish-flask]
+    if: always()
+    steps:
+      - uses: slackapi/slack-github-action@v3.0.1
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            text: "*Python SDK PyPI publish v${{ github.ref_name }}*: sdk=${{ needs.publish-sdk.result }} django=${{ needs.publish-django.result }} fastapi=${{ needs.publish-fastapi.result }} flask=${{ needs.publish-flask.result }}\n${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
