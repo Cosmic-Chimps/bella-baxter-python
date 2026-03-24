@@ -175,4 +175,4 @@ jobs:
           webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
           webhook-type: incoming-webhook
           payload: |
-            text: "*Python SDK PyPI publish v${{ github.ref_name }}*: sdk=${{ needs.publish-sdk.result }} django=${{ needs.publish-django.result }} fastapi=${{ needs.publish-fastapi.result }} flask=${{ needs.publish-flask.result }}\n${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            text: "*Python SDK PyPI publish ${{ github.ref_name }}*: sdk=${{ needs.publish-sdk.result }} django=${{ needs.publish-django.result }} fastapi=${{ needs.publish-fastapi.result }} flask=${{ needs.publish-flask.result }}\n${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
