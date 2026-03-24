@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bella-baxter-django"
-version = "0.1.1-preview.12"
+version = "0.1.1-preview.13"
 description = "Django integration for the Bella Baxter secret management SDK"
 readme = "README.md"
 license = { text = "MIT" }
