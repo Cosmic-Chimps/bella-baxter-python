@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bella-baxter"
-version = "0.1.1-preview.27"
+version = "0.1.1-preview.28"
 description = "Python SDK for the Bella Baxter secret management platform"
 readme = "README.md"
 license = { text = "MIT" }
