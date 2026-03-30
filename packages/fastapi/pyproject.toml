@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bella-baxter-fastapi"
-version = "0.1.1-preview.33"
+version = "0.1.1-preview.34"
 description = "FastAPI integration for the Bella Baxter secret management SDK"
 readme = "README.md"
 license = { text = "MIT" }
