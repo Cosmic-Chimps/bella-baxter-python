@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Dict
+from typing import Callable, Dict, Optional
 
 
 @dataclass
@@ -14,6 +14,15 @@ class BaxterClientOptions:
 
     #: Request timeout in seconds (default: 10)
     timeout: float = 10.0
+
+    #: ZKE: optional persistent device private key (PKCS#8 PEM).
+    #: When set, uses a persistent key for transport encryption and captures DEK leases.
+    #: Supply via BELLA_BAXTER_PRIVATE_KEY env var or directly.
+    private_key: Optional[str] = None
+
+    #: ZKE: called when X-Bella-Wrapped-Dek is received.
+    #: Signature: (project_slug: str, env_slug: str, wrapped_dek: str, lease_expires: Optional[str]) -> None
+    on_wrapped_dek_received: Optional[Callable] = None
 
 
 @dataclass

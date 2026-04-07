@@ -71,7 +71,9 @@ class BellaBaxter:
         Reads from ``app.config`` if ``api_key`` was not provided to the constructor:
         - ``BELLA_BAXTER_API_KEY`` (required)
         - ``BELLA_BAXTER_URL`` (optional)
+        - ``BELLA_BAXTER_PRIVATE_KEY`` (optional, ZKE — also read from env var)
         """
+        import os
         from bella_baxter import BaxterClient, BaxterClientOptions
 
         api_key = self._api_key or app.config.get("BELLA_BAXTER_API_KEY")
@@ -85,8 +87,17 @@ class BellaBaxter:
             "BELLA_BAXTER_URL", "https://api.bella-baxter.io"
         )
 
+        private_key: str | None = (
+            os.environ.get("BELLA_BAXTER_PRIVATE_KEY")
+            or app.config.get("BELLA_BAXTER_PRIVATE_KEY")
+        )
+
         self._client = BaxterClient(
-            BaxterClientOptions(baxter_url=baxter_url, api_key=api_key)
+            BaxterClientOptions(
+                baxter_url=baxter_url,
+                api_key=api_key,
+                private_key=private_key,
+            )
         )
 
         app.bella = self  # type: ignore[attr-defined]

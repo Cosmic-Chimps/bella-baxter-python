@@ -75,6 +75,33 @@ class E2EKeyPair:
         self._private_key = generate_private_key(SECP256R1(), default_backend())
         self._public_key_b64 = self._export_spki_b64()
 
+    @classmethod
+    def from_pem(cls, pem: str) -> "E2EKeyPair":
+        """
+        Create an E2EKeyPair from a PKCS#8 PEM private key (persistent device key).
+        Use this for ZKE mode instead of the default ephemeral key generation.
+
+        Obtain a key with: bella auth setup  (exports ~/.bella/device-key.pem)
+        """
+        _require_cryptography()
+        from cryptography.hazmat.primitives.serialization import load_pem_private_key
+        from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePrivateKey
+        from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+
+        pem_bytes = pem.encode() if isinstance(pem, str) else pem
+        private_key = load_pem_private_key(pem_bytes, password=None)
+
+        if not isinstance(private_key, EllipticCurvePrivateKey):
+            raise ValueError("ZKE private key must be an EC (P-256) key")
+
+        spki = private_key.public_key().public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
+        public_key_b64 = base64.b64encode(spki).decode()
+
+        instance = cls.__new__(cls)
+        instance._private_key = private_key
+        instance._public_key_b64 = public_key_b64
+        return instance
+
     def _export_spki_b64(self) -> str:
         from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
         spki = self._private_key.public_key().public_bytes(

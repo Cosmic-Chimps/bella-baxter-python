@@ -38,12 +38,14 @@ def get_bella() -> "BaxterClient":
     Reads configuration from Django settings:
     - ``BELLA_BAXTER_API_KEY`` (required)
     - ``BELLA_BAXTER_URL`` (optional, defaults to https://api.bella-baxter.io)
+    - ``BELLA_BAXTER_PRIVATE_KEY`` (optional, ZKE device key — also read from env var)
     """
     global _client
 
     if _client is None:
         with _lock:
             if _client is None:
+                import os
                 from django.conf import settings
                 from bella_baxter import BaxterClient, BaxterClientOptions
 
@@ -53,9 +55,17 @@ def get_bella() -> "BaxterClient":
                     "BELLA_BAXTER_URL",
                     "https://api.bella-baxter.io",
                 )
+                private_key: str | None = (
+                    os.environ.get("BELLA_BAXTER_PRIVATE_KEY")
+                    or getattr(settings, "BELLA_BAXTER_PRIVATE_KEY", None)
+                )
 
                 _client = BaxterClient(
-                    BaxterClientOptions(baxter_url=baxter_url, api_key=api_key)
+                    BaxterClientOptions(
+                        baxter_url=baxter_url,
+                        api_key=api_key,
+                        private_key=private_key,
+                    )
                 )
 
     return _client

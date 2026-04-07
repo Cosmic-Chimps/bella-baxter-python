@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from typing import Optional
 
 import httpx
 
@@ -40,6 +41,22 @@ def _decrypt_response(response: httpx.Response, e2ee: E2EKeyPair, raw_content: b
     return response
 
 
+def _fire_wrapped_dek_callback(request: httpx.Request, response: httpx.Response, on_wrapped_dek) -> None:
+    """Extract slugs from the URL and fire the on_wrapped_dek_received callback."""
+    wrapped_dek = response.headers.get("X-Bella-Wrapped-Dek")
+    lease_expires = response.headers.get("X-Bella-Lease-Expires")
+    if wrapped_dek and on_wrapped_dek:
+        parts = str(request.url.path).split("/")
+        try:
+            proj_idx = parts.index("projects") + 1
+            env_idx = parts.index("environments") + 1
+            project_slug = parts[proj_idx]
+            env_slug = parts[env_idx]
+        except (ValueError, IndexError):
+            project_slug = env_slug = ""
+        on_wrapped_dek(project_slug, env_slug, wrapped_dek, lease_expires)
+
+
 class E2EETransport(httpx.BaseTransport):
     """
     Synchronous httpx transport that transparently handles E2EE for GET /secrets requests.
@@ -48,9 +65,15 @@ class E2EETransport(httpx.BaseTransport):
     On inbound:  decrypts the encrypted payload and reconstructs a normal JSON response.
     """
 
-    def __init__(self, wrapped: httpx.BaseTransport) -> None:
+    def __init__(
+        self,
+        wrapped: httpx.BaseTransport,
+        private_key: Optional[str] = None,
+        on_wrapped_dek_received=None,
+    ) -> None:
         self._wrapped = wrapped
-        self._e2ee = E2EKeyPair()
+        self._e2ee = E2EKeyPair.from_pem(private_key) if private_key else E2EKeyPair()
+        self._on_wrapped_dek = on_wrapped_dek_received
 
     def handle_request(self, request: httpx.Request) -> httpx.Response:
         is_secrets = request.url.path.rstrip("/").endswith("/secrets") and request.method == "GET"
@@ -62,6 +85,8 @@ class E2EETransport(httpx.BaseTransport):
 
         if is_secrets and response.is_success:
             response.read()
+            if self._on_wrapped_dek:
+                _fire_wrapped_dek_callback(request, response, self._on_wrapped_dek)
             response = _decrypt_response(response, self._e2ee, response.content)
 
         return response
@@ -74,9 +99,15 @@ class AsyncE2EETransport(httpx.AsyncBaseTransport):
     Used by BaxterClient when building the AsyncClient for the Kiota adapter.
     """
 
-    def __init__(self, wrapped: httpx.AsyncBaseTransport) -> None:
+    def __init__(
+        self,
+        wrapped: httpx.AsyncBaseTransport,
+        private_key: Optional[str] = None,
+        on_wrapped_dek_received=None,
+    ) -> None:
         self._wrapped = wrapped
-        self._e2ee = E2EKeyPair()
+        self._e2ee = E2EKeyPair.from_pem(private_key) if private_key else E2EKeyPair()
+        self._on_wrapped_dek = on_wrapped_dek_received
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
         is_secrets = request.url.path.rstrip("/").endswith("/secrets") and request.method == "GET"
@@ -88,6 +119,8 @@ class AsyncE2EETransport(httpx.AsyncBaseTransport):
 
         if is_secrets and response.is_success:
             await response.aread()
+            if self._on_wrapped_dek:
+                _fire_wrapped_dek_callback(request, response, self._on_wrapped_dek)
             response = _decrypt_response(response, self._e2ee, response.content)
 
         return response

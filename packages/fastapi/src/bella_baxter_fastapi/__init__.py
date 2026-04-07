@@ -44,6 +44,7 @@ _client: "BaxterClient | None" = None
 def init_bella(
     api_key: str,
     baxter_url: str = "https://api.bella-baxter.io",
+    private_key: str | None = None,
 ) -> "BaxterClient":
     """
     Initialise the shared BaxterClient. Call once at application startup.
@@ -51,6 +52,8 @@ def init_bella(
     Args:
         api_key: Bella Baxter API key (``bax-...``).
         baxter_url: Base URL of the Baxter API.
+        private_key: Optional ZKE device private key (PKCS#8 PEM).
+            Also read from the ``BELLA_BAXTER_PRIVATE_KEY`` environment variable.
 
     Returns:
         The initialised BaxterClient instance.
@@ -58,10 +61,17 @@ def init_bella(
     global _client
 
     with _lock:
+        import os
         from bella_baxter import BaxterClient, BaxterClientOptions
 
+        resolved_key = private_key or os.environ.get("BELLA_BAXTER_PRIVATE_KEY")
+
         _client = BaxterClient(
-            BaxterClientOptions(baxter_url=baxter_url, api_key=api_key)
+            BaxterClientOptions(
+                baxter_url=baxter_url,
+                api_key=api_key,
+                private_key=resolved_key,
+            )
         )
 
     return _client

@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import hashlib
 import hmac as hmac_mod
+import os
 from datetime import datetime, timezone
 
 import httpx
@@ -44,6 +46,11 @@ class BaxterClient:
     """
 
     def __init__(self, options: BaxterClientOptions) -> None:
+        # Auto-read ZKE private key from env var if not set directly
+        private_key = options.private_key or os.environ.get("BELLA_BAXTER_PRIVATE_KEY")
+        if private_key and not options.private_key:
+            options = dataclasses.replace(options, private_key=private_key)
+
         self._options = options
         self._key_context: dict | None = None
 
@@ -54,7 +61,11 @@ class BaxterClient:
 
         auth = HmacAuthProvider(options.api_key)
         async_client = httpx.AsyncClient(
-            transport=AsyncE2EETransport(httpx.AsyncHTTPTransport()),
+            transport=AsyncE2EETransport(
+                httpx.AsyncHTTPTransport(),
+                private_key=options.private_key,
+                on_wrapped_dek_received=options.on_wrapped_dek_received,
+            ),
             headers={"User-Agent": "bella-python-sdk/1.0", "X-Bella-Client": "bella-python-sdk"},
         )
         adapter = HttpxRequestAdapter(auth, http_client=async_client)
