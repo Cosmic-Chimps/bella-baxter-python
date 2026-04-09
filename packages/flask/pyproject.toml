@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bella-baxter-flask"
-version = "0.1.1-preview.47"
+version = "0.1.1-preview.48"
 description = "Flask integration for the Bella Baxter secret management SDK"
 readme = "README.md"
 license = { text = "MIT" }
