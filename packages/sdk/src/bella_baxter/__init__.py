@@ -23,13 +23,34 @@ from .models import (
     BaxterClientOptions,
     AllEnvironmentSecretsResponse,
     EnvironmentSecretsVersionResponse,
+    PkiCaInfo,
+    PkiIssuedCertificate,
+    SshCaInfo,
+    SshSignedCert,
 )
+from .generated.models.pki_create_role_request import PkiCreateRoleRequest
+from .generated.models.pki_issue_certificate_request import PkiIssueCertificateRequest
+from .generated.models.pki_role_response import PkiRoleResponse
+from .generated.models.ssh_sign_request import SshSignRequest
 from .webhook_signature import verify_webhook_signature
 
 __all__ = [
+    # Client
     "BaxterClient",
     "BaxterClientOptions",
+    # Secrets
     "AllEnvironmentSecretsResponse",
     "EnvironmentSecretsVersionResponse",
+    # PKI
+    "PkiCaInfo",
+    "PkiIssuedCertificate",
+    "PkiCreateRoleRequest",
+    "PkiIssueCertificateRequest",
+    "PkiRoleResponse",
+    # SSH
+    "SshCaInfo",
+    "SshSignedCert",
+    "SshSignRequest",
+    # Utilities
     "verify_webhook_signature",
 ]

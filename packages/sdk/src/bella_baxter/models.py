@@ -47,3 +47,53 @@ class EnvironmentSecretsVersionResponse:
     environment_slug: str
     version: int
     last_modified: str
+
+
+@dataclass
+class PkiCaInfo:
+    """Parsed CA info from GET .../pki/ca"""
+
+    #: PEM-encoded CA certificate
+    certificate: str
+    #: Full PEM chain (CA + intermediates)
+    ca_chain: str
+    #: ACME directory URL for certbot/acme.sh auto-renewal
+    acme_directory_url: str
+
+
+@dataclass
+class PkiIssuedCertificate:
+    """Parsed certificate from POST .../pki/issue"""
+
+    #: PEM-encoded leaf certificate
+    certificate: str
+    #: PEM-encoded private key (treat as secret)
+    private_key: str
+    #: Full PEM chain (all CA certs, newline-joined)
+    ca_chain: str
+    #: PEM-encoded issuing CA certificate
+    issuing_ca: str
+    #: Vault-style serial number (e.g. "1a:2b:...")
+    serial_number: str
+    #: Unix timestamp of certificate expiration (None if not returned)
+    expiration: int | None = None
+
+
+@dataclass
+class SshCaInfo:
+    """Response from GET .../ssh/ca_public_key"""
+
+    #: OpenSSH public key of the CA (the string you write to TrustedUserCAKeys)
+    ca_public_key: str
+    #: Optional instructions returned by the API
+    instructions: str = ""
+
+
+@dataclass
+class SshSignedCert:
+    """Response from POST .../ssh/sign"""
+
+    #: Signed SSH certificate string (write next to the public key as id_XXX-cert.pub)
+    signed_key: str
+    #: Vault serial number of this certificate
+    serial_number: str = ""

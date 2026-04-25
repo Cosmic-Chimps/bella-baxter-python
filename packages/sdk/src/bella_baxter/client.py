@@ -15,7 +15,16 @@ from .models import (
     BaxterClientOptions,
     AllEnvironmentSecretsResponse,
     EnvironmentSecretsVersionResponse,
+    PkiCaInfo,
+    PkiIssuedCertificate,
+    SshCaInfo,
+    SshSignedCert,
 )
+
+from .generated.models.pki_create_role_request import PkiCreateRoleRequest
+from .generated.models.pki_issue_certificate_request import PkiIssueCertificateRequest
+from .generated.models.pki_role_response import PkiRoleResponse
+from .generated.models.ssh_sign_request import SshSignRequest
 from .hmac_auth_provider import HmacAuthProvider
 from .e2ee_httpx_transport import E2EETransport, AsyncE2EETransport
 
@@ -187,6 +196,211 @@ class BaxterClient:
     def client(self) -> "BellaClient":
         """The underlying Kiota client for full API access (TOTP, projects, providers, etc.)"""
         return self._kiota
+
+    # ── PKI ────────────────────────────────────────────────────────────────────
+
+    def get_pki_ca(
+        self,
+        project_slug: str | None = None,
+        env_slug: str | None = None,
+    ) -> PkiCaInfo:
+        """Fetch the PKI CA certificate and ACME directory URL."""
+        return asyncio.run(self.get_pki_ca_async(project_slug, env_slug))
+
+    async def get_pki_ca_async(
+        self,
+        project_slug: str | None = None,
+        env_slug: str | None = None,
+    ) -> PkiCaInfo:
+        ctx = self.get_key_context()
+        project_slug = project_slug or ctx["projectSlug"]
+        env_slug = env_slug or ctx["environmentSlug"]
+        resp = await (
+            self._kiota.api.v1.projects.by_id(project_slug)
+            .environments.by_env_slug(env_slug)
+            .pki.ca.get()
+        )
+        return PkiCaInfo(
+            certificate=resp.certificate or "",
+            ca_chain=resp.ca_chain or "",
+            acme_directory_url=resp.acme_directory_url or "",
+        )
+
+    def list_pki_roles(
+        self,
+        project_slug: str | None = None,
+        env_slug: str | None = None,
+    ) -> list[PkiRoleResponse]:
+        """List all PKI roles for an environment."""
+        return asyncio.run(self.list_pki_roles_async(project_slug, env_slug))
+
+    async def list_pki_roles_async(
+        self,
+        project_slug: str | None = None,
+        env_slug: str | None = None,
+    ) -> list[PkiRoleResponse]:
+        ctx = self.get_key_context()
+        project_slug = project_slug or ctx["projectSlug"]
+        env_slug = env_slug or ctx["environmentSlug"]
+        resp = await (
+            self._kiota.api.v1.projects.by_id(project_slug)
+            .environments.by_env_slug(env_slug)
+            .pki.roles.get()
+        )
+        return resp.roles or []
+
+    def create_pki_role(
+        self,
+        body: PkiCreateRoleRequest,
+        project_slug: str | None = None,
+        env_slug: str | None = None,
+    ) -> PkiRoleResponse:
+        """Create a PKI role. Returns the created role."""
+        return asyncio.run(self.create_pki_role_async(body, project_slug, env_slug))
+
+    async def create_pki_role_async(
+        self,
+        body: PkiCreateRoleRequest,
+        project_slug: str | None = None,
+        env_slug: str | None = None,
+    ) -> PkiRoleResponse:
+        ctx = self.get_key_context()
+        project_slug = project_slug or ctx["projectSlug"]
+        env_slug = env_slug or ctx["environmentSlug"]
+        return await (
+            self._kiota.api.v1.projects.by_id(project_slug)
+            .environments.by_env_slug(env_slug)
+            .pki.roles.post(body)
+        )
+
+    def delete_pki_role(
+        self,
+        role_name: str,
+        project_slug: str | None = None,
+        env_slug: str | None = None,
+    ) -> None:
+        """Delete a PKI role by name."""
+        asyncio.run(self.delete_pki_role_async(role_name, project_slug, env_slug))
+
+    async def delete_pki_role_async(
+        self,
+        role_name: str,
+        project_slug: str | None = None,
+        env_slug: str | None = None,
+    ) -> None:
+        ctx = self.get_key_context()
+        project_slug = project_slug or ctx["projectSlug"]
+        env_slug = env_slug or ctx["environmentSlug"]
+        await (
+            self._kiota.api.v1.projects.by_id(project_slug)
+            .environments.by_env_slug(env_slug)
+            .pki.roles.by_role_name(role_name)
+            .delete()
+        )
+
+    def issue_pki_certificate(
+        self,
+        body: PkiIssueCertificateRequest,
+        project_slug: str | None = None,
+        env_slug: str | None = None,
+    ) -> PkiIssuedCertificate:
+        """Issue a TLS certificate. Returns cert, private key, and CA chain."""
+        return asyncio.run(self.issue_pki_certificate_async(body, project_slug, env_slug))
+
+    async def issue_pki_certificate_async(
+        self,
+        body: PkiIssueCertificateRequest,
+        project_slug: str | None = None,
+        env_slug: str | None = None,
+    ) -> PkiIssuedCertificate:
+        ctx = self.get_key_context()
+        project_slug = project_slug or ctx["projectSlug"]
+        env_slug = env_slug or ctx["environmentSlug"]
+        resp = await (
+            self._kiota.api.v1.projects.by_id(project_slug)
+            .environments.by_env_slug(env_slug)
+            .pki.issue.post(body)
+        )
+        return PkiIssuedCertificate(
+            certificate=resp.certificate or "",
+            private_key=resp.private_key or "",
+            ca_chain="\n".join(resp.ca_chain or []),
+            issuing_ca=resp.issuing_ca or "",
+            serial_number=resp.serial_number or "",
+            expiration=resp.expiration,
+        )
+
+    # ── SSH ────────────────────────────────────────────────────────────────────
+
+    def get_ssh_ca_public_key(
+        self,
+        project_slug: str | None = None,
+        env_slug: str | None = None,
+    ) -> SshCaInfo:
+        """Fetch the SSH CA public key (the string you add to TrustedUserCAKeys)."""
+        return asyncio.run(self.get_ssh_ca_public_key_async(project_slug, env_slug))
+
+    async def get_ssh_ca_public_key_async(
+        self,
+        project_slug: str | None = None,
+        env_slug: str | None = None,
+    ) -> SshCaInfo:
+        ctx = self.get_key_context()
+        project_slug = project_slug or ctx["projectSlug"]
+        env_slug = env_slug or ctx["environmentSlug"]
+        resp = await (
+            self._kiota.api.v1.projects.by_id(project_slug)
+            .environments.by_env_slug(env_slug)
+            .ssh.ca_public_key.get()
+        )
+        return SshCaInfo(
+            ca_public_key=resp.ca_public_key or "",
+            instructions=resp.instructions or "",
+        )
+
+    def sign_ssh_key(
+        self,
+        role_name: str,
+        public_key: str,
+        ttl: str | None = None,
+        valid_principals: str | None = None,
+        project_slug: str | None = None,
+        env_slug: str | None = None,
+    ) -> SshSignedCert:
+        """Sign an SSH public key and return the signed certificate."""
+        return asyncio.run(
+            self.sign_ssh_key_async(
+                role_name, public_key, ttl, valid_principals, project_slug, env_slug
+            )
+        )
+
+    async def sign_ssh_key_async(
+        self,
+        role_name: str,
+        public_key: str,
+        ttl: str | None = None,
+        valid_principals: str | None = None,
+        project_slug: str | None = None,
+        env_slug: str | None = None,
+    ) -> SshSignedCert:
+        ctx = self.get_key_context()
+        project_slug = project_slug or ctx["projectSlug"]
+        env_slug = env_slug or ctx["environmentSlug"]
+        body = SshSignRequest(
+            role_name=role_name,
+            public_key=public_key,
+            ttl=ttl,
+            valid_principals=valid_principals,
+        )
+        resp = await (
+            self._kiota.api.v1.projects.by_id(project_slug)
+            .environments.by_env_slug(env_slug)
+            .ssh.sign.post(body)
+        )
+        return SshSignedCert(
+            signed_key=resp.signed_key or "",
+            serial_number=resp.serial_number or "",
+        )
 
     # Context-manager support
     def __enter__(self) -> "BaxterClient":
