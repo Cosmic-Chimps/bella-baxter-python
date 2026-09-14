@@ -22,6 +22,31 @@ def _add_e2ee_header(request: httpx.Request, public_key_b64: str) -> httpx.Reque
     )
 
 
+# Headers that describe the body that came off the WIRE, not the plaintext one we substitute.
+#
+# `content-encoding` is the one that breaks callers: a CDN in front of the API compresses the
+# response (Cloudflare sends `content-encoding: br` whenever httpx's default `Accept-Encoding` is
+# present), httpx transparently decompresses it when we read `.content`, and we then hand back a
+# PLAINTEXT body. Carrying the original header forward tells httpx's decoder to decompress it a
+# second time, which fails with "Error -3 while decompressing data: incorrect header check".
+#
+# `content-length` and `transfer-encoding` describe the wire body's framing for the same reason.
+# httpx recomputes the length from the content we pass.
+_WIRE_BODY_HEADERS = frozenset({"content-encoding", "content-length", "transfer-encoding"})
+
+
+def _headers_for_decrypted_body(headers: httpx.Headers) -> httpx.Headers:
+    """
+    Drop the headers that describe the encrypted wire body, keep everything else.
+
+    Everything else matters: `X-Bella-Wrapped-Dek` and `X-Bella-Lease-Expires` are read by callers,
+    and `multi_items()` is used rather than `dict()` so repeated headers survive.
+    """
+    return httpx.Headers(
+        [(name, value) for name, value in headers.multi_items() if name.lower() not in _WIRE_BODY_HEADERS]
+    )
+
+
 def _decrypt_response(response: httpx.Response, e2ee: E2EKeyPair, raw_content: bytes) -> httpx.Response:
     """Decrypt the E2EE-encrypted response body and return a new plain response."""
     import json as _json
@@ -35,7 +60,7 @@ def _decrypt_response(response: httpx.Response, e2ee: E2EKeyPair, raw_content: b
             new_body = _json.dumps({"secrets": secrets, "version": 0, "environmentSlug": "", "environmentName": "", "lastModified": ""}).encode()
         return httpx.Response(
             status_code=response.status_code,
-            headers=response.headers,
+            headers=_headers_for_decrypted_body(response.headers),
             content=new_body,
         )
     return response
