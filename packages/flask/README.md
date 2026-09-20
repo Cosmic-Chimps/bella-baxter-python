@@ -6,7 +6,7 @@ Attaches a `BaxterClient` to your Flask app as `app.bella`.
 ## Installation
 
 ```bash
-pip install bella-baxter-flask
+pip install --pre bella-baxter-flask
 ```
 
 ## Quickstart

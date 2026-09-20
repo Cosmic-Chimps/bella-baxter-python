@@ -6,7 +6,7 @@ Automatically loads secrets from Bella Baxter and makes them available throughou
 ## Installation
 
 ```bash
-pip install bella-baxter-django
+pip install --pre bella-baxter-django
 ```
 
 ## Quickstart

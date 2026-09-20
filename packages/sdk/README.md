@@ -17,7 +17,7 @@ Most applications should use a framework integration instead:
 ## Installation
 
 ```bash
-pip install bella-baxter
+pip install --pre bella-baxter
 ```
 
 ## Quickstart

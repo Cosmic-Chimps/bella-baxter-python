@@ -6,7 +6,7 @@ Provides a `BellaDepends` dependency annotation for injecting a `BaxterClient` i
 ## Installation
 
 ```bash
-pip install bella-baxter-fastapi
+pip install --pre bella-baxter-fastapi
 ```
 
 ## Quickstart

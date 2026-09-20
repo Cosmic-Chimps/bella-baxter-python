@@ -29,7 +29,7 @@ Do you want zero Python SDK code?
 ## Prerequisites
 
 - Python 3.11+
-- `pip install bella-baxter` (or from this monorepo)
+- `pip install --pre bella-baxter` (or from this monorepo)
 - Bella Baxter account + API key
 
 ```bash
