@@ -7,11 +7,11 @@
 ## How it works
 
 ```
-bella secrets generate python -o secrets.py
+bella secrets generate python -o bella_secrets.py
 ↓
 secrets.py  (generated, safe to commit — contains NO secret values)
 ↓
-from secrets import AppSecrets
+from bella_secrets import AppSecrets
 ↓
 AppSecrets().database_url  (typed, IDE-autocomplete, runtime validation)
 ```
@@ -23,12 +23,12 @@ AppSecrets().database_url  (typed, IDE-autocomplete, runtime validation)
 pip install -r requirements.txt
 
 # Authenticate
-bella login --api-key bax-xxxxxxxxxxxxxxxxxxxx
+bella login
 
 export BELLA_BAXTER_URL=http://localhost:5522   # your Bella Baxter instance
 
 # Generate the typed class (re-run whenever secrets change)
-bella secrets generate python -o secrets.py
+bella secrets generate python -o bella_secrets.py
 
 # Pull actual secret values into environment
 bella secrets get -o .env
@@ -46,7 +46,7 @@ bella run -- python app.py
 
 ## What's generated
 
-`bella secrets generate python` reads your project's secret manifest and emits `secrets.py`:
+`bella secrets generate python` reads your project's secret manifest and emits `bella_secrets.py`:
 
 | Secret               | Type    | Accessor                          |
 |----------------------|---------|-----------------------------------|
@@ -59,6 +59,6 @@ bella run -- python app.py
 ## Regenerate after adding secrets
 
 ```bash
-bella secrets generate python -o secrets.py
-git add secrets.py  # safe — no values
+bella secrets generate python -o bella_secrets.py
+git add bella_secrets.py  # safe — no values
 ```

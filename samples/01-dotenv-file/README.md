@@ -18,7 +18,7 @@ bella secrets get -o .env   →   .env file on disk   →   load_dotenv()   → 
 pip install -r requirements.txt
 
 # Authenticate
-bella login --api-key bax-xxxxxxxxxxxxxxxxxxxx
+bella login
 
 export BELLA_BAXTER_URL=http://localhost:5522   # your Bella Baxter instance
 

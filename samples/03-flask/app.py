@@ -19,6 +19,11 @@ from bella_baxter import BaxterClient, BaxterClientOptions
 logger = logging.getLogger(__name__)
 
 
+def _bella_api_key() -> str:
+    """The credential `bella sdk run` injects, canonical name first."""
+    return os.environ.get("BELLA_BAXTER_API_KEY") or os.environ.get("BELLA_API_KEY", "")
+
+
 def load_bella_secrets(app: Flask) -> None:
     """
     Fetch all secrets from Bella Baxter and inject them into os.environ.
@@ -28,7 +33,9 @@ def load_bella_secrets(app: Flask) -> None:
     """
     client = BaxterClient(BaxterClientOptions(
         baxter_url=os.environ.get("BELLA_BAXTER_URL", "http://localhost:5000"),
-        api_key=os.environ.get("BELLA_API_KEY", ""),
+        # #733: BELLA_BAXTER_API_KEY is the canonical name `bella sdk run` injects;
+        # BELLA_API_KEY is the deprecated alias it also sets.
+        api_key=_bella_api_key(),
     ))
 
     try:
@@ -51,9 +58,20 @@ def load_bella_secrets(app: Flask) -> None:
 def create_app() -> Flask:
     """Application factory."""
 
-    # Load secrets BEFORE Flask config so os.environ is populated
-    if os.environ.get("BELLA_API_KEY"):
-        load_bella_secrets(Flask(__name__))
+    # Load secrets BEFORE Flask config so os.environ is populated.
+    #
+    # #733: this used to be a bare `if BELLA_API_KEY:` with no else, so with no credential the
+    # app started, served the fallback values below, and said nothing. That is precisely what
+    # `bella sdk run` produces under an OAuth session — it injects BELLA_BAXTER_ACCESS_TOKEN and
+    # no api key — so the most likely way to run the sample was also the way it silently did
+    # nothing. A sample whose subject is loading secrets must refuse to start without them.
+    if not _bella_api_key():
+        raise RuntimeError(
+            "No Bella credential in the environment. Set BELLA_BAXTER_API_KEY, or run this under "
+            "`bella sdk run -- flask run` with an API key — an OAuth session injects an access "
+            "token and no api key, which this sample cannot use."
+        )
+    load_bella_secrets(Flask(__name__))
 
     app = Flask(__name__)
 

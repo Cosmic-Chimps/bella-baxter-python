@@ -9,11 +9,11 @@
 ```bash
 pip install -r requirements.txt
 
-bella login --api-key bax-xxxxxxxxxxxxxxxxxxxx
+bella login
 
 export BELLA_BAXTER_URL=http://localhost:5522   # your Bella Baxter instance
 
-bella exec -- flask run
+bella sdk run -- flask run
 # or production:
 gunicorn "app:create_app()"
 ```

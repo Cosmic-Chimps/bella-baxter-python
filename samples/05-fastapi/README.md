@@ -9,11 +9,11 @@
 ```bash
 pip install -r requirements.txt
 
-bella login --api-key bax-xxxxxxxxxxxxxxxxxxxx
+bella login
 
 export BELLA_BAXTER_URL=http://localhost:5522   # your Bella Baxter instance
 
-bella exec -- uvicorn main:app --host 0.0.0.0 --port 8000
+bella sdk run -- uvicorn main:app --host 0.0.0.0 --port 8000
 # development:
 uvicorn main:app --reload
 ```

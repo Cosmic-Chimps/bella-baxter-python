@@ -212,7 +212,7 @@ cd "$SAMPLE_03"
 FLASK_PID_FILE="/tmp/bella-flask-test.pid"
 FLASK_LOG="/tmp/bella-flask-test.log"
 
-FLASK_APP=app:create_app bella exec --app python-03-flask -- "$VENV_DIR/bin/flask" run --host 127.0.0.1 --port "$FLASK_PORT" \
+FLASK_APP=app:create_app bella sdk run --app python-03-flask -- "$VENV_DIR/bin/flask" run --host 127.0.0.1 --port "$FLASK_PORT" \
     > "$FLASK_LOG" 2>&1 &
 echo $! > "$FLASK_PID_FILE"
 
@@ -243,7 +243,7 @@ cd "$SAMPLE_04"
 DJANGO_LOG="/tmp/bella-django-test.log"
 DJANGO_PID_FILE="/tmp/bella-django-test.pid"
 
-DJANGO_SETTINGS_MODULE=settings bella exec --app python-04-django -- \
+DJANGO_SETTINGS_MODULE=settings bella sdk run --app python-04-django -- \
     "$PYTHON" "$SAMPLE_04/manage.py" runserver "127.0.0.1:$DJANGO_PORT" --noreload \
     > "$DJANGO_LOG" 2>&1 &
 echo $! > "$DJANGO_PID_FILE"
@@ -275,7 +275,7 @@ cd "$SAMPLE_05"
 FASTAPI_LOG="/tmp/bella-fastapi-test.log"
 FASTAPI_PID_FILE="/tmp/bella-fastapi-test.pid"
 
-bella exec --app python-05-fastapi -- "$VENV_DIR/bin/uvicorn" main:app --host 127.0.0.1 --port "$FASTAPI_PORT" \
+bella sdk run --app python-05-fastapi -- "$VENV_DIR/bin/uvicorn" main:app --host 127.0.0.1 --port "$FASTAPI_PORT" \
     > "$FASTAPI_LOG" 2>&1 &
 echo $! > "$FASTAPI_PID_FILE"
 

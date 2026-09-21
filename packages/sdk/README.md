@@ -65,7 +65,7 @@ Generate via `bella api-keys create` or the Bella WebApp.
 
 ```bash
 bella login           # opens browser, stores token in .bella file
-bella exec -- python app.py   # injects BELLA_BAXTER_API_KEY + BELLA_BAXTER_URL automatically
+bella sdk run -- python app.py   # injects BELLA_BAXTER_API_KEY + BELLA_BAXTER_URL automatically
 ```
 
 ## End-to-end encryption

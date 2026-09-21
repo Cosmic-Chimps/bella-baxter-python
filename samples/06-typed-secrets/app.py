@@ -8,12 +8,12 @@ Typed Secrets sample — one secret per Bella type:
   GUID   → app_id      ← parsed into uuid.UUID
 
 Workflow:
-  bella secrets generate python -p my-project -e production -o secrets.py
-  bella exec -- python app.py
+  bella secrets generate python -p my-project -e production -o bella_secrets.py
+  bella sdk run -- python app.py
 """
 
 from dotenv import load_dotenv
-from secrets import AppSecrets
+from bella_secrets import AppSecrets
 
 load_dotenv()
 
