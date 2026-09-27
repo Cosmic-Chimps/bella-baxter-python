@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 
 import httpx
 
+from .e2ee import resolve_device_key
 from .models import (
     BaxterClientOptions,
     AllEnvironmentSecretsResponse,
@@ -56,8 +57,8 @@ class BaxterClient:
 
     def __init__(self, options: BaxterClientOptions) -> None:
         # Auto-read ZKE private key from env var if not set directly
-        private_key = options.private_key or os.environ.get("BELLA_BAXTER_PRIVATE_KEY")
-        if private_key and not options.private_key:
+        private_key = resolve_device_key(options.private_key)
+        if private_key != options.private_key:
             options = dataclasses.replace(options, private_key=private_key)
 
         self._options = options

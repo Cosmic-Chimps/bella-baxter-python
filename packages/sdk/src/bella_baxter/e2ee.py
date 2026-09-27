@@ -58,6 +58,21 @@ class E2EEncryptedPayload:
 
 # ── Key pair ──────────────────────────────────────────────────────────────────
 
+def resolve_device_key(explicit: str | None) -> str | None:
+    """The device key a client should use: ``explicit``, else ``BELLA_BAXTER_PRIVATE_KEY``.
+
+    A blank value (empty or whitespace, from either source) means "no device key", as in every other
+    SDK. Anything else is returned as-is and must then load as a P-256 key, or construction fails
+    loudly (``E2EKeyPair.from_pem``).
+    """
+    import os
+
+    def _clean(v: str | None) -> str | None:
+        return v if v is not None and v.strip() else None
+
+    return _clean(explicit) or _clean(os.environ.get("BELLA_BAXTER_PRIVATE_KEY"))
+
+
 class E2EKeyPair:
     """P-256 key pair used for one-time E2EE handshake with the Bella Baxter API.
 
@@ -93,6 +108,14 @@ class E2EKeyPair:
 
         if not isinstance(private_key, EllipticCurvePrivateKey):
             raise ValueError("ZKE private key must be an EC (P-256) key")
+        # The platform's ECIES is P-256 only. Any other curve used to load here and then fail on the
+        # server with an unclear error; refuse it where the cause is still visible. The same rule as
+        # the JS, Java, .NET, Swift, Dart and Go SDKs.
+        from cryptography.hazmat.primitives.asymmetric.ec import SECP256R1
+        if not isinstance(private_key.curve, SECP256R1):
+            raise ValueError(
+                f"ZKE private key must be a P-256 (secp256r1) key, not {private_key.curve.name}"
+            )
 
         spki = private_key.public_key().public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
         public_key_b64 = base64.b64encode(spki).decode()

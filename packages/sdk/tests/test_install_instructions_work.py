@@ -44,8 +44,18 @@ BARE_INSTALL = re.compile(rf"\bpip3?\s+install\s+(?!--pre\b)(?!-)({PACKAGES})(?!
 
 WITH_PRE = re.compile(rf"\bpip3?\s+install\s+--pre\s+({PACKAGES})(?![-\w])")
 
-#: Bug reports describe the broken command on purpose and must keep doing so.
-EXCLUDED = ("docs/issues/", "node_modules/", ".venv", "/obj/", "/bin/", ".claude/")
+#: Bug reports describe the broken command on purpose and must keep doing so. So does THIS file: its
+#: docstring quotes the broken command to explain the defect, and without excluding itself the guard
+#: failed on every checkout, reporting its own explanation as an offender.
+EXCLUDED = (
+    "docs/issues/",
+    "node_modules/",
+    ".venv",
+    "/obj/",
+    "/bin/",
+    ".claude/",
+    "apps/sdk/python/packages/sdk/tests/test_install_instructions_work.py",
+)
 
 
 def repo_root() -> Path:
