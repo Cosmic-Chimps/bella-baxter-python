@@ -7,7 +7,15 @@ from typing import Optional
 
 import httpx
 
-from .e2ee import E2EKeyPair, maybe_decrypt, maybe_decrypt_raw
+from .e2ee import (
+    E2EE_DECRYPTION_FAILED,
+    E2EE_PLAINTEXT_RESPONSE,
+    E2EEResponseError,
+    E2EKeyPair,
+    maybe_decrypt,
+    maybe_decrypt_raw,
+    requires_envelope,
+)
 
 
 def _add_e2ee_header(request: httpx.Request, public_key_b64: str) -> httpx.Request:
@@ -47,23 +55,47 @@ def _headers_for_decrypted_body(headers: httpx.Headers) -> httpx.Headers:
     )
 
 
-def _decrypt_response(response: httpx.Response, e2ee: E2EKeyPair, raw_content: bytes) -> httpx.Response:
-    """Decrypt the E2EE-encrypted response body and return a new plain response."""
-    import json as _json
-    data = _json.loads(raw_content)
-    if data.get("encrypted"):
+def _decrypt_response(
+    response: httpx.Response,
+    e2ee: E2EKeyPair,
+    raw_content: bytes,
+    path: str,
+    envelope_required: bool,
+) -> httpx.Response:
+    """Decrypt the E2EE-encrypted response body and return a new plain response.
+
+    #1050 — when ``envelope_required`` (the key was presented on a read the server encrypts), anything
+    but a decryptable envelope raises :class:`E2EEResponseError`: plain JSON or a non-JSON body is
+    ``e2ee-plaintext-response``; an envelope that will not decrypt (tampered, another key, a missing
+    field) is ``e2ee-decryption-failed``. The plaintext is never returned in its place.
+    """
+    try:
+        data = json.loads(raw_content)
+    except (ValueError, UnicodeDecodeError) as err:
+        if envelope_required:
+            raise E2EEResponseError(E2EE_PLAINTEXT_RESPONSE, path) from err
+        return response
+
+    if not isinstance(data, dict) or data.get("encrypted") is not True:
+        if envelope_required:
+            raise E2EEResponseError(E2EE_PLAINTEXT_RESPONSE, path)
+        return response
+
+    try:
         decrypted = maybe_decrypt_raw(data, e2ee)
-        if "secrets" in decrypted and isinstance(decrypted.get("secrets"), dict):
-            new_body = _json.dumps(decrypted).encode()
+        if isinstance(decrypted, dict) and isinstance(decrypted.get("secrets"), dict):
+            new_body = json.dumps(decrypted).encode()
         else:
             secrets = maybe_decrypt(data, e2ee)
-            new_body = _json.dumps({"secrets": secrets, "version": 0, "environmentSlug": "", "environmentName": "", "lastModified": ""}).encode()
-        return httpx.Response(
-            status_code=response.status_code,
-            headers=_headers_for_decrypted_body(response.headers),
-            content=new_body,
-        )
-    return response
+            new_body = json.dumps({"secrets": secrets, "version": 0, "environmentSlug": "", "environmentName": "", "lastModified": ""}).encode()
+    except Exception as err:  # noqa: BLE001 — every decryption failure is the same refusal
+        raise E2EEResponseError(E2EE_DECRYPTION_FAILED, path) from err
+
+    return httpx.Response(
+        status_code=response.status_code,
+        headers=_headers_for_decrypted_body(response.headers),
+        content=new_body,
+    )
 
 
 def _fire_wrapped_dek_callback(request: httpx.Request, response: httpx.Response, on_wrapped_dek) -> None:
@@ -87,7 +119,9 @@ class E2EETransport(httpx.BaseTransport):
     Synchronous httpx transport that transparently handles E2EE for GET /secrets requests.
 
     On outbound: adds X-E2E-Public-Key header so the server encrypts the response.
-    On inbound:  decrypts the encrypted payload and reconstructs a normal JSON response.
+    On inbound:  decrypts the encrypted payload and reconstructs a normal JSON response. Having
+                 presented the key, a 2xx answer to an envelope-required read that is plaintext, or an
+                 envelope that will not decrypt, raises :class:`E2EEResponseError` (#1050).
     """
 
     def __init__(
@@ -110,9 +144,17 @@ class E2EETransport(httpx.BaseTransport):
 
         if is_secrets and response.is_success:
             response.read()
+            decrypted = _decrypt_response(
+                response,
+                self._e2ee,
+                response.content,
+                request.url.path,
+                envelope_required=requires_envelope(request.method, request.url.path),
+            )
+            # Only after the body was accepted: a refused answer's wrapped DEK is not cached.
             if self._on_wrapped_dek:
                 _fire_wrapped_dek_callback(request, response, self._on_wrapped_dek)
-            response = _decrypt_response(response, self._e2ee, response.content)
+            response = decrypted
 
         return response
 
@@ -144,8 +186,16 @@ class AsyncE2EETransport(httpx.AsyncBaseTransport):
 
         if is_secrets and response.is_success:
             await response.aread()
+            decrypted = _decrypt_response(
+                response,
+                self._e2ee,
+                response.content,
+                request.url.path,
+                envelope_required=requires_envelope(request.method, request.url.path),
+            )
+            # Only after the body was accepted: a refused answer's wrapped DEK is not cached.
             if self._on_wrapped_dek:
                 _fire_wrapped_dek_callback(request, response, self._on_wrapped_dek)
-            response = _decrypt_response(response, self._e2ee, response.content)
+            response = decrypted
 
         return response

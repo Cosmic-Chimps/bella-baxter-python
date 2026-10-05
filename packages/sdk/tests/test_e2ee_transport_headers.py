@@ -31,6 +31,7 @@ import httpx
 import pytest
 
 from bella_baxter import e2ee_httpx_transport
+from bella_baxter.e2ee import E2EE_PLAINTEXT_RESPONSE, E2EEResponseError
 from bella_baxter.e2ee_httpx_transport import AsyncE2EETransport, E2EETransport
 
 SECRETS_URL = "https://api.example.test/api/v1/projects/p/environments/e/secrets"
@@ -127,17 +128,21 @@ def test_an_uncompressed_response_is_unaffected() -> None:
     assert body["secrets"]["API_KEY"] == "s3cr3t"
 
 
-def test_a_plain_unencrypted_response_passes_straight_through() -> None:
-    """Not every /secrets response is encrypted; that path must not be touched at all."""
+def test_a_plain_unencrypted_response_is_refused_after_presenting_the_key() -> None:
+    """
+    #1050 (b): this used to assert the opposite — that a plain body on a read the key was presented for
+    "passes straight through". That pass-through WAS the defect; the rule and its four cases live in
+    test_e2ee_refuses_plaintext.py.
+    """
     payload = json.dumps({"secrets": {"PLAIN": "value"}}).encode()
     upstream = httpx.Response(200, headers={"content-type": "application/json"}, content=payload)
 
     transport = E2EETransport(_CannedTransport(upstream))
     with httpx.Client(transport=transport) as client:
-        response = client.get(SECRETS_URL)
-        body = json.loads(response.read())
+        with pytest.raises(E2EEResponseError) as raised:
+            client.get(SECRETS_URL)
 
-    assert body["secrets"]["PLAIN"] == "value"
+    assert raised.value.code == E2EE_PLAINTEXT_RESPONSE
 
 
 @pytest.mark.asyncio

@@ -33,6 +33,7 @@ from .generated.models.pki_issue_certificate_request import PkiIssueCertificateR
 from .generated.models.pki_role_response import PkiRoleResponse
 from .generated.models.ssh_sign_request import SshSignRequest
 from .webhook_signature import verify_webhook_signature
+from .e2ee import E2EE_DECRYPTION_FAILED, E2EE_PLAINTEXT_RESPONSE, E2EEResponseError
 
 __all__ = [
     # Client
@@ -51,6 +52,10 @@ __all__ = [
     "SshCaInfo",
     "SshSignedCert",
     "SshSignRequest",
+    # E2EE (#1050): a presented key requires an envelope
+    "E2EEResponseError",
+    "E2EE_PLAINTEXT_RESPONSE",
+    "E2EE_DECRYPTION_FAILED",
     # Utilities
     "verify_webhook_signature",
 ]

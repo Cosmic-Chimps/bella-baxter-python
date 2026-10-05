@@ -33,6 +33,77 @@ def _require_cryptography() -> None:
         ) from exc
 
 
+# ── #1050: a presented key requires an envelope ──────────────────────────────
+#
+# apps/sdk/SDK_CONTRACT.md, "Rule: a presented key requires an envelope". Once this SDK has sent its
+# X-E2E-Public-Key on a read the server encrypts, a 2xx answer that is not a decryptable envelope is an
+# ERROR, never a value: a header-stripping intermediary, a terminating proxy or a server regression would
+# otherwise hand the caller unencrypted secrets it believes were end-to-end encrypted, and a tampered or
+# mis-keyed envelope would be read as if it were its secrets. There is no plaintext fallback and no opt-out.
+
+E2EE_PLAINTEXT_RESPONSE = "e2ee-plaintext-response"
+"""The key was presented on an envelope-required read and the 2xx answer was not an envelope."""
+
+E2EE_DECRYPTION_FAILED = "e2ee-decryption-failed"
+"""The answer was an envelope that did not decrypt: a missing/undecodable field, a failed GCM tag
+(tampered), or encrypted to a key other than the one presented."""
+
+
+class E2EEResponseError(Exception):
+    """A secrets response this client presented its E2EE key for was refused (#1050).
+
+    ``code`` is one of :data:`E2EE_PLAINTEXT_RESPONSE` or :data:`E2EE_DECRYPTION_FAILED` — the same
+    strings in every Bella SDK. The message names the request path and the code, never the body,
+    ciphertext or key material; the underlying failure, if any, is the ``__cause__``.
+    """
+
+    def __init__(self, code: str, path: str) -> None:
+        self.code = code
+        self.path = path
+        if code == E2EE_PLAINTEXT_RESPONSE:
+            message = f"E2EE response expected but plaintext received for {path}; refusing it ({code})"
+        else:
+            message = f"E2EE response could not be decrypted for {path}; refusing it ({code})"
+        super().__init__(message)
+
+
+_API_PROJECTS = "/api/v1/projects/"
+
+
+def requires_envelope(method: str, path: str) -> bool:
+    """Whether the server encrypts this read's 2xx body to a presented key (SDK_CONTRACT.md).
+
+    The envelope-required reads are the GETs that carry secret VALUES; everything else under
+    ``/secrets`` (``…/secrets/version``, ``…/hash``, ``…/{key}/metadata``, writes, …) is plain JSON
+    even when the key is presented, and must not be refused.
+    """
+    if method.upper() != "GET":
+        return False
+    i = path.find(_API_PROJECTS)
+    if i < 0:
+        return False
+    segs = path[i + len(_API_PROJECTS):].rstrip("/").split("/")
+    if len(segs) < 2 or not segs[0]:
+        return False
+    rest = segs[1:]
+    if rest == ["secrets"]:  # listGlobalSecrets
+        return True
+    if len(rest) < 3 or rest[0] != "environments" or not rest[1]:
+        return False
+    tail = rest[2:]
+    if tail in (["secrets"], ["secrets", "export"]):  # getAllEnvironmentSecrets, exportEnvironmentSecrets
+        return True
+    if len(tail) < 3 or tail[0] != "providers" or not tail[1] or tail[2] != "secrets":
+        return False
+    after = tail[3:]
+    if not after:  # listSecrets
+        return True
+    if len(after) == 1:  # exportSecrets / getSecret
+        return bool(after[0]) and after[0] != "hash"
+    # getSecretVersion
+    return len(after) == 3 and bool(after[0]) and after[1] == "versions" and after[2].isdigit() and after[2].isascii()
+
+
 # ── Wire format ───────────────────────────────────────────────────────────────
 
 @dataclass
