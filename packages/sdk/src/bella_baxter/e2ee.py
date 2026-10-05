@@ -2,15 +2,15 @@
 
 Algorithm: ECDH-P256-HKDF-SHA256-AES256GCM
 
-Usage::
+E2EE is always on: ``BaxterClient``'s transport presents ``X-E2E-Public-Key`` on every read that carries
+secret values (the seven envelope-required reads in apps/sdk/SDK_CONTRACT.md, including those made through
+``client.client``) and decrypts the response. There is no option to turn it off::
 
-    # With e2ee enabled, getAllSecrets/getSecretsVersion automatically
-    # send ``X-E2E-Public-Key`` and decrypt the response.
-    options = BaxterClientOptions(
+    client = BaxterClient(BaxterClientOptions(
         baxter_url="https://api.bella-baxter.io",
         api_key="bax-...",
-        enable_e2ee=True,   # ← opt-in
-    )
+        # private_key=...  (optional) a registered device key; defaults to BELLA_BAXTER_PRIVATE_KEY
+    ))
 
 Requires: ``pip install 'bella-baxter[e2ee]'`` (adds ``cryptography>=41``).
 """

@@ -41,9 +41,8 @@ PLAINTEXT = {"secrets": {"API_KEY": "s3cr3t"}, "version": 1}
 @pytest.fixture(autouse=True)
 def _stub_decryption(monkeypatch: pytest.MonkeyPatch) -> None:
     """Stand in for the server's envelope; see the module docstring for why."""
-    monkeypatch.setattr(e2ee_httpx_transport, "maybe_decrypt_raw", lambda data, keypair: PLAINTEXT)
     monkeypatch.setattr(
-        e2ee_httpx_transport, "maybe_decrypt", lambda data, keypair: PLAINTEXT["secrets"]
+        e2ee_httpx_transport, "_decrypt_plaintext", lambda data, keypair: json.dumps(PLAINTEXT).encode()
     )
 
 

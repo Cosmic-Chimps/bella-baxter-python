@@ -1,4 +1,4 @@
-"""E2EETransport — httpx transport wrapper that adds E2EE to GET /secrets requests."""
+"""E2EETransport — httpx transport wrapper that adds E2EE to the envelope-required secret reads."""
 
 from __future__ import annotations
 
@@ -10,12 +10,26 @@ import httpx
 from .e2ee import (
     E2EE_DECRYPTION_FAILED,
     E2EE_PLAINTEXT_RESPONSE,
+    E2EEncryptedPayload,
     E2EEResponseError,
     E2EKeyPair,
-    maybe_decrypt,
-    maybe_decrypt_raw,
     requires_envelope,
 )
+
+
+def _decrypt_plaintext(envelope: dict, e2ee: E2EKeyPair) -> bytes:
+    """The envelope's plaintext bytes, exactly as the server serialized them."""
+    return e2ee.decrypt_raw(E2EEncryptedPayload.from_dict(envelope))
+
+
+def _is_all_environment_secrets(path: str) -> bool:
+    """``…/api/v1/projects/{p}/environments/{e}/secrets`` — getAllEnvironmentSecrets."""
+    marker = "/api/v1/projects/"
+    i = path.find(marker)
+    if i < 0:
+        return False
+    segs = path[i + len(marker):].rstrip("/").split("/")
+    return len(segs) == 4 and segs[1] == "environments" and segs[3] == "secrets"
 
 
 def _add_e2ee_header(request: httpx.Request, public_key_b64: str) -> httpx.Request:
@@ -82,14 +96,26 @@ def _decrypt_response(
         return response
 
     try:
-        decrypted = maybe_decrypt_raw(data, e2ee)
-        if isinstance(decrypted, dict) and isinstance(decrypted.get("secrets"), dict):
-            new_body = json.dumps(decrypted).encode()
-        else:
-            secrets = maybe_decrypt(data, e2ee)
-            new_body = json.dumps({"secrets": secrets, "version": 0, "environmentSlug": "", "environmentName": "", "lastModified": ""}).encode()
+        plaintext = _decrypt_plaintext(data, e2ee)
+        decrypted = json.loads(plaintext.decode("utf-8"))
     except Exception as err:  # noqa: BLE001 — every decryption failure is the same refusal
         raise E2EEResponseError(E2EE_DECRYPTION_FAILED, path) from err
+
+    # #1162 — the plaintext of every envelope-required read is the JSON the server would have sent
+    # without a key (a secret item, an array of them, a {key: value} export, ListGlobalSecretsResponse),
+    # so it is handed on byte for byte. Only getAllEnvironmentSecrets keeps its legacy rescue: a server
+    # that encrypted just the flat {key: value} dict is re-wrapped as an AllEnvironmentSecretsResponse.
+    # Wrapping anything else would decrypt correctly and still return the wrong thing.
+    if _is_all_environment_secrets(path) and not (
+        isinstance(decrypted, dict) and isinstance(decrypted.get("secrets"), dict)
+    ):
+        if not isinstance(decrypted, dict):
+            raise E2EEResponseError(E2EE_DECRYPTION_FAILED, path)
+        new_body = json.dumps(
+            {"secrets": decrypted, "version": 0, "environmentSlug": "", "environmentName": "", "lastModified": ""}
+        ).encode()
+    else:
+        new_body = plaintext
 
     return httpx.Response(
         status_code=response.status_code,
@@ -116,7 +142,7 @@ def _fire_wrapped_dek_callback(request: httpx.Request, response: httpx.Response,
 
 class E2EETransport(httpx.BaseTransport):
     """
-    Synchronous httpx transport that transparently handles E2EE for GET /secrets requests.
+    Synchronous httpx transport that transparently handles E2EE for the envelope-required secret reads.
 
     On outbound: adds X-E2E-Public-Key header so the server encrypts the response.
     On inbound:  decrypts the encrypted payload and reconstructs a normal JSON response. Having
@@ -135,21 +161,23 @@ class E2EETransport(httpx.BaseTransport):
         self._on_wrapped_dek = on_wrapped_dek_received
 
     def handle_request(self, request: httpx.Request) -> httpx.Response:
-        is_secrets = request.url.path.rstrip("/").endswith("/secrets") and request.method == "GET"
+        # #1162 — the key is presented on every envelope-required read (SDK_CONTRACT.md, "Rule: the key
+        # is presented on every envelope-required read"), decided here by the one matcher, never per method.
+        presented = requires_envelope(request.method, request.url.path)
 
-        if is_secrets:
+        if presented:
             request = _add_e2ee_header(request, self._e2ee.public_key_b64)
 
         response = self._wrapped.handle_request(request)
 
-        if is_secrets and response.is_success:
+        if presented and response.is_success:
             response.read()
             decrypted = _decrypt_response(
                 response,
                 self._e2ee,
                 response.content,
                 request.url.path,
-                envelope_required=requires_envelope(request.method, request.url.path),
+                envelope_required=True,
             )
             # Only after the body was accepted: a refused answer's wrapped DEK is not cached.
             if self._on_wrapped_dek:
@@ -161,7 +189,7 @@ class E2EETransport(httpx.BaseTransport):
 
 class AsyncE2EETransport(httpx.AsyncBaseTransport):
     """
-    Async httpx transport that transparently handles E2EE for GET /secrets requests.
+    Async httpx transport that transparently handles E2EE for the envelope-required secret reads.
 
     Used by BaxterClient when building the AsyncClient for the Kiota adapter.
     """
@@ -177,21 +205,23 @@ class AsyncE2EETransport(httpx.AsyncBaseTransport):
         self._on_wrapped_dek = on_wrapped_dek_received
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
-        is_secrets = request.url.path.rstrip("/").endswith("/secrets") and request.method == "GET"
+        # #1162 — the key is presented on every envelope-required read (SDK_CONTRACT.md, "Rule: the key
+        # is presented on every envelope-required read"), decided here by the one matcher, never per method.
+        presented = requires_envelope(request.method, request.url.path)
 
-        if is_secrets:
+        if presented:
             request = _add_e2ee_header(request, self._e2ee.public_key_b64)
 
         response = await self._wrapped.handle_async_request(request)
 
-        if is_secrets and response.is_success:
+        if presented and response.is_success:
             await response.aread()
             decrypted = _decrypt_response(
                 response,
                 self._e2ee,
                 response.content,
                 request.url.path,
-                envelope_required=requires_envelope(request.method, request.url.path),
+                envelope_required=True,
             )
             # Only after the body was accepted: a refused answer's wrapped DEK is not cached.
             if self._on_wrapped_dek:
