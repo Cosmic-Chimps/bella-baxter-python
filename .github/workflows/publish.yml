@@ -66,7 +66,7 @@ jobs:
 
       - name: Generate Kiota Python client
         run: |
-          dotnet tool install --global Microsoft.OpenApi.Kiota --version 1.30.0
+          dotnet tool install --global Microsoft.OpenApi.Kiota --version 1.35.0
           kiota generate \
             --language Python \
             --class-name BellaClient \
