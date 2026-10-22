@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from typing import Callable, Dict, Optional
 
@@ -76,7 +78,7 @@ class PkiIssuedCertificate:
     #: Vault-style serial number (e.g. "1a:2b:...")
     serial_number: str
     #: Unix timestamp of certificate expiration (None if not returned)
-    expiration: int | None = None
+    expiration: Optional[int] = None
 
 
 @dataclass

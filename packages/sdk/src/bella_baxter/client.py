@@ -22,10 +22,12 @@ from .models import (
     SshSignedCert,
 )
 
+from .generated.models.create_secret_request import CreateSecretRequest
 from .generated.models.pki_create_role_request import PkiCreateRoleRequest
 from .generated.models.pki_issue_certificate_request import PkiIssueCertificateRequest
 from .generated.models.pki_role_response import PkiRoleResponse
 from .generated.models.ssh_sign_request import SshSignRequest
+from .generated.models.update_secret_request import UpdateSecretRequest
 from .hmac_auth_provider import HmacAuthProvider
 from .e2ee_httpx_transport import E2EETransport, AsyncE2EETransport
 
@@ -35,6 +37,23 @@ try:
     _KIOTA_AVAILABLE = True
 except ImportError:
     _KIOTA_AVAILABLE = False
+
+
+def _is_not_found(exc: BaseException) -> bool:
+    """
+    True when a Kiota error carries HTTP status 404.
+
+    Decided from the status code the adapter attaches (``APIError.response_status_code``), never from the
+    exception text: a message that merely mentions "404", or a 500 whose body says "not found", must not be
+    read as "the thing is absent".
+    """
+    return getattr(exc, "response_status_code", None) == 404
+
+
+def _require_provider(provider: str) -> str:
+    if not isinstance(provider, str) or not provider.strip():
+        raise ValueError("provider is required: the slug or the UUID of the provider that holds the secret")
+    return provider
 
 
 class BaxterClient:
@@ -192,6 +211,144 @@ class BaxterClient:
             version=resp.version or 0,
             last_modified=str(resp.last_modified or ""),
         )
+
+    # ── Writing secrets ────────────────────────────────────────────────────────
+
+    def set_secret(
+        self,
+        key: str,
+        value: str,
+        *,
+        provider: str,
+        project_slug: str | None = None,
+        env_slug: str | None = None,
+        description: str | None = None,
+    ) -> None:
+        """
+        Create or update one secret (an upsert). Synchronous wrapper of :meth:`set_secret_async`.
+
+        Everything after ``value`` is keyword-only, so a provider can never be passed where a project
+        was meant.
+        """
+        asyncio.run(
+            self.set_secret_async(
+                key,
+                value,
+                provider=provider,
+                project_slug=project_slug,
+                env_slug=env_slug,
+                description=description,
+            )
+        )
+
+    async def set_secret_async(
+        self,
+        key: str,
+        value: str,
+        *,
+        provider: str,
+        project_slug: str | None = None,
+        env_slug: str | None = None,
+        description: str | None = None,
+    ) -> None:
+        """
+        Create or update one secret.
+
+        ``PUT .../providers/{provider}/secrets/{key}`` first: the API treats it as an upsert. A
+        scope-limited API key may not change what it may not read, so for a key that does not exist yet
+        the PUT answers 404; ``POST .../providers/{provider}/secrets`` (create) is the path that stamps
+        the key's scopes on what it creates, so a 404 falls back to it (the CLI's ``bella secrets set``
+        does the same). Any other error raises, and so does a 404 from the create: then the environment or
+        the provider really does not exist.
+
+        ``provider`` is the provider's slug or its UUID. Environments are addressed by SLUG (an environment
+        UUID is not accepted). Writing needs a Manager API key or higher; a Consumer key is read-only and
+        the API answers 403.
+
+        If ``project_slug`` or ``env_slug`` are not provided, they are auto-discovered from the API key
+        via GET /api/v1/keys/me (only when one of them is missing).
+
+        Tags are not written here: the API takes them through ``PATCH .../metadata``.
+        """
+        provider = _require_provider(provider)
+        project_slug, env_slug = self._resolve_project_env(project_slug, env_slug)
+
+        secrets = (
+            self._kiota.api.v1.projects.by_id(project_slug)
+            .environments.by_env_slug(env_slug)
+            .providers.by_provider_slug(provider)
+            .secrets
+        )
+        try:
+            await secrets.by_key(key).put(
+                UpdateSecretRequest(key=key, value=value, description=description)
+            )
+        except Exception as exc:
+            if not _is_not_found(exc):
+                raise
+            await secrets.post(CreateSecretRequest(key=key, value=value, description=description))
+
+    def delete_secret(
+        self,
+        key: str,
+        *,
+        provider: str,
+        project_slug: str | None = None,
+        env_slug: str | None = None,
+    ) -> bool:
+        """
+        Delete one secret. Synchronous wrapper of :meth:`delete_secret_async`.
+
+        Returns True when it was deleted and False when the API answered 404 (it was already absent).
+        """
+        return asyncio.run(
+            self.delete_secret_async(
+                key, provider=provider, project_slug=project_slug, env_slug=env_slug
+            )
+        )
+
+    async def delete_secret_async(
+        self,
+        key: str,
+        *,
+        provider: str,
+        project_slug: str | None = None,
+        env_slug: str | None = None,
+    ) -> bool:
+        """
+        ``DELETE .../providers/{provider}/secrets/{key}``.
+
+        Returns True when the secret was deleted and False when the API answered 404 (already absent;
+        decided from the status code, not the message). Any other error raises. Needs a Manager API key
+        or higher. ``provider`` is the provider's slug or UUID; project and environment default to the
+        API key's own, as in :meth:`set_secret_async`.
+        """
+        provider = _require_provider(provider)
+        project_slug, env_slug = self._resolve_project_env(project_slug, env_slug)
+
+        try:
+            await (
+                self._kiota.api.v1.projects.by_id(project_slug)
+                .environments.by_env_slug(env_slug)
+                .providers.by_provider_slug(provider)
+                .secrets.by_key(key)
+                .delete()
+            )
+        except Exception as exc:
+            if _is_not_found(exc):
+                return False
+            raise
+        return True
+
+    def _resolve_project_env(
+        self, project_slug: str | None, env_slug: str | None
+    ) -> tuple[str, str]:
+        """Fill in whichever of project/environment was not given from the API key's own context."""
+        if not project_slug or not env_slug:
+            ctx = self.get_key_context()
+            project_slug = project_slug or ctx["projectSlug"]
+            env_slug = env_slug or ctx["environmentSlug"]
+        return project_slug, env_slug
 
     @property
     def client(self) -> "BellaClient":
