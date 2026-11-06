@@ -1,9 +1,10 @@
 """Import every module of the INSTALLED ``bella_baxter`` package, hand-written and generated.
 
-Why this exists (#1484): ``pyproject.toml`` declares ``requires-python = ">=3.9"``, but ``models.py`` used
+Why this exists (#1484): ``pyproject.toml`` declared ``requires-python = ">=3.9"``, but ``models.py`` used
 ``int | None`` in a dataclass, which Python 3.9 evaluates at class creation and rejects with ``TypeError``.
 ``import bella_baxter`` failed for every 3.9 user, and nothing noticed: the unit tests register a stand-in
-package precisely so ``__init__`` never runs (see ``tests/conftest.py``), and CI only ever ran 3.12.
+package precisely so ``__init__`` never runs (see ``tests/conftest.py``), and CI only ever ran 3.12. The
+minimum is now 3.10; this is the check that the package really imports on whatever ``requires-python`` claims.
 
 Run it from OUTSIDE the source tree, with the interpreter the claim is about, against a pip-installed copy::
 
