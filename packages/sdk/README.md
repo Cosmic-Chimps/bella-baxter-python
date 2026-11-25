@@ -42,11 +42,9 @@ secrets = await client.get_all_secrets_async()
 
 ### API key (recommended for apps and CI/CD)
 
-```bash
-# Generate a key via the CLI
-bella api-keys create --env production --name "MyApp Production"
-# Returns: bax-<keyId>-<secret>
-```
+An API key belongs to one environment. In the Bella WebApp, open the project, choose the **Environments** tab,
+open the environment, choose its **API Keys** tab, then choose **Create API Key**. The key
+(`bax-<keyId>-<secret>`) is shown once, when it is created.
 
 ```python
 import os
@@ -59,7 +57,7 @@ client = BaxterClient(BaxterClientOptions(
 ```
 
 API keys encode the project and environment slug — no config file needed.
-Generate via `bella api-keys create` or the Bella WebApp.
+The `bella api-keys` commands are planned and are not in the CLI yet.
 
 ### OAuth (local dev)
 

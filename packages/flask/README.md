@@ -83,8 +83,8 @@ version = bella.get_secrets_version()
 
 ## Authentication
 
-Generate an API key via the CLI or the Bella WebApp:
+An API key belongs to one environment. In the Bella WebApp, open the project, choose the **Environments** tab,
+open the environment, choose its **API Keys** tab, then choose **Create API Key**. The key
+(`bax-<keyId>-<secret>`) is shown once, when it is created.
 
-```bash
-bella api-keys create --env production --name "Flask Production"
-```
+The `bella api-keys` commands are planned and are not in the CLI yet.
